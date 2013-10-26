@@ -49,7 +49,7 @@ function sendSMS(userRef, message)
 	 userRef.once('value', function(sendSMSSnapshot) {
 	 	user = sendSMSSnapshot.val();
 
-	 	if(user.mobile)
+	 	if(user.mobile && user.mobile != '4477123456789')
 	 	{
 	 		addTask('sms', { mobile: user.mobile, message: encodeURIComponent(message) });
 	 	}
@@ -159,7 +159,19 @@ queuesRef.on('child_added', function(snapshot) {
 
 });
 
-console.log("Worker initialised");
+usersRef.on('child_added', function(childSnapshot) {
+	user = childSnapshot.val();
+
+	if(user.fullName == 'Anonymous')
+	{
+		if(!user.registrationTextSent)
+		{
+			console.log("Anonymous user detected. Sending registration text");
+			sendSMS(childSnapshot.ref(), "Thanks for using qcue.me - unfortunately we don't know who you are. Reply with NAME your name to register yourself.");
+			childSnapshot.ref().child('registrationTextSent').set(true);
+		}
+	}
+});
 
 setInterval(function() {
 	//console.log("Checking automated queues")
@@ -208,3 +220,4 @@ setInterval(function() {
 	}
 }, 1000)
 
+console.log("Worker initialised");

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "firebase": "~0.6.3",
-    "log-timestamp": "~0.1.0"
+    "log-timestamp": "~0.1.0",
+    "underscore": "~1.5.2"
   }
 }
