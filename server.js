@@ -26,4 +26,4 @@ function SendSMS(number, message)
 	http.request(options, callback).end();
 }
 
-SendSMS('', 'Hello+World')
+SendSMS(config.TestSMSNumber, 'Hello+World')
