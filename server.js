@@ -49,13 +49,13 @@ function sendSMS(userRef, message)
 	 userRef.once('value', function(sendSMSSnapshot) {
 	 	user = sendSMSSnapshot.val();
 
-	 	if(user.mobile && user.mobile != '4477123456789')
+	 	if(user.mobile && !user.mobile.indexOf("4455") == 0)
 	 	{
 	 		addTask('sms', { mobile: user.mobile, message: encodeURIComponent(message) });
 	 	}
 	 	else
 	 	{
-	 		console.log("User " + user.fullName + " has no mobile so we won't try sending an SMS");
+	 		console.log("User " + user.fullName + " has no mobile or has a test number so we won't try sending an SMS");
 	 	}
 	 });	 
 }
@@ -99,6 +99,28 @@ function handleQueuedUser(handleUserSnapShot)
 	});
 
 	
+}
+
+function handleUser(handleUserSnapShot)
+{
+	user = handleUserSnapShot.val();
+
+	if(user.fullName == 'Anonymous')
+	{
+		if(!user.registrationTextSent)
+		{
+			console.log("Anonymous user detected. Sending registration text");
+			sendSMS(handleUserSnapShot.ref(), "Thanks for using qcue.me. Unfortunately we don't know who you are. Reply with NAME your name to register yourself.");
+			handleUserSnapShot.ref().child('registrationTextSent').set(true);
+		}
+	}
+
+	if(user.status == 'registered')
+	{
+		console.log(user.fullName + 'has now registered. Sending confirmation message.');
+		sendSMS(handleUserSnapShot.ref(), "Thanks for registering for qcue.me. We won't bother you anymore with such trivial questions.");
+		handleUserSnapShot.ref().child('status').remove();
+	}
 }
 
 console.log("Worker initialising")
@@ -160,17 +182,11 @@ queuesRef.on('child_added', function(snapshot) {
 });
 
 usersRef.on('child_added', function(childSnapshot) {
-	user = childSnapshot.val();
+	handleUser(childSnapshot);
+});
 
-	if(user.fullName == 'Anonymous')
-	{
-		if(!user.registrationTextSent)
-		{
-			console.log("Anonymous user detected. Sending registration text");
-			sendSMS(childSnapshot.ref(), "Thanks for using qcue.me - unfortunately we don't know who you are. Reply with NAME your name to register yourself.");
-			childSnapshot.ref().child('registrationTextSent').set(true);
-		}
-	}
+usersRef.on('child_changed', function(childSnapshot) {
+	handleUser(childSnapshot);
 });
 
 setInterval(function() {
