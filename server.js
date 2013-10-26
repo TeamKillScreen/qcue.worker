@@ -68,7 +68,7 @@ queuesRef.on('child_added', function(snapshot) {
 	{
 		console.log('Found automated queue ' + item.name + '. Monitoring')
 
-		managedQueues.push({name: item.name, queue: snapshot.ref(), timer: item.gap, lastChecked: new Date()});
+		managedQueues.push({queue: snapshot.ref(), timer: item.gap, lastChecked: new Date()});
 	}
 });
 
@@ -92,11 +92,31 @@ setInterval(function() {
 
 		if(diffTime > element.timer * 1000)
 		{
-			console.log("Processing queue: " + element.name);
-
-			//DO STUFF
-
+			//Mark last checked as now
 			element.lastChecked = now;
+
+			//Get the item from firebase
+			element.queue.once('value', function(snapshot) {
+
+				item = snapshot.val();
+
+				startDate = new Date(item.queueStart);
+
+				if(startDate < new Date())
+				{
+					console.log("Processing queue: " + item.name);
+				}
+				else
+				{
+					console.log("Queue not started: " + item.name);
+				}
+
+				//DO STUFF
+
+				//Update local timer cache
+				element.timer = item.gap;
+			});
+
 		}
 	}
 }, 1000)
