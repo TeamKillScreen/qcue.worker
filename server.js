@@ -6,6 +6,7 @@ var Firebase = require('firebase');
 
 var tasksRef = new Firebase(config.TasksFirebaseURL);
 var queuesRef = new Firebase(config.QueuesFirebaseURL);
+var usersRef = new Firebase(config.UsersFirebaseURL);
 
 var managedQueues = [];
 
@@ -31,6 +32,73 @@ function SendSMS(number, message)
 	}
 
 	http.request(options, callback).end();
+}
+
+function setStatus(userRef, state)
+{
+	userRef.child('status').set(state);
+}
+
+function getUserRef(userId)
+{
+	return usersRef.child(userId).ref();
+}
+
+function sendSMS(userRef, message)
+{
+	 userRef.once('value', function(sendSMSSnapshot) {
+	 	user = sendSMSSnapshot.val();
+
+	 	if(user.mobile)
+	 	{
+	 		addTask('sms', { mobile: user.mobile, message: encodeURIComponent(message) });
+	 	}
+	 	else
+	 	{
+	 		console.log("User " + user.fullName + " has no mobile so we won't try sending an SMS");
+	 	}
+	 });	 
+}
+
+function addTask(type, payload)
+{
+	tasksRef.push({ task: type, payload: payload });
+}
+
+function handleQueuedUser(handleUserSnapShot)
+{
+	var item = handleUserSnapShot.val();
+
+	//Get parent queueId
+	var parentQueue = handleUserSnapShot.ref().parent().ref().parent();
+
+	parentQueue.child('messages').ref().once('value', function(messagesSnapshot) {
+		messages = messagesSnapshot.val();
+
+		switch(item.status)
+		{
+			case 'joined':
+				sendSMS(getUserRef(item.userId), messages.joined);
+
+				setStatus(handleUserSnapShot.ref(), 'waiting');
+
+				break;
+			case 'servicing':
+				sendSMS(getUserRef(item.userId), messages.servicing);
+				break;
+			case 'serviced':
+				sendSMS(getUserRef(item.userId), messages.serviced);
+				handleUserSnapShot.ref().remove();
+				break;
+			case 'holding':
+				sendSMS(getUserRef(item.userId), messages.holding);
+				break;
+		}	
+
+		
+	});
+
+	
 }
 
 console.log("Worker initialising")
@@ -66,10 +134,29 @@ queuesRef.on('child_added', function(snapshot) {
 
 	if(item.type == 'automated')
 	{
-		console.log('Found automated queue ' + item.name + '. Monitoring')
+		console.log('Found automated queue ' + item.name + '. Monitoring.')
 
 		managedQueues.push({queue: snapshot.ref(), timer: item.gap, lastChecked: new Date()});
 	}
+
+	//Add event to queue to monitor for changes to users in queue.
+
+	console.log('Monitoring for user changes for queue ' + item.name + '.')
+
+	users = snapshot.child('users');
+
+	users.ref().on('child_changed', function(snapshot) {
+		item = snapshot.val();
+
+		handleQueuedUser(snapshot);
+	});
+
+	users.ref().on('child_added', function(snapshot) {
+		item = snapshot.val();
+
+		handleQueuedUser(snapshot);
+	});
+
 });
 
 console.log("Worker initialised");
