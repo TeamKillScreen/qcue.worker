@@ -10,7 +10,7 @@ var usersRef = new Firebase(config.UsersFirebaseURL);
 
 var managedQueues = [];
 
-function SendSMS(number, message)
+function taskSendSMS(number, message)
 {
 	var options = {
 	  host: 'api.clockworksms.com',
@@ -137,7 +137,7 @@ tasksRef.on('child_added', function(snapshot) {
 	{
 		case 'sms':
 			console.log('Received SMS task. Number: ' + payload.mobile);
-			SendSMS(payload.mobile, payload.message)
+			taskSendSMS(payload.mobile, payload.message)
 			break;
 		default:
 			console.log('Unknown task: ' + task);
