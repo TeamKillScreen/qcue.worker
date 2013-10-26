@@ -1,5 +1,8 @@
 var http = require('https');
 var config = require('./config');
+var Firebase = require('firebase');
+
+var tasksRef = new Firebase(config.FirebaseURL);
 
 function SendSMS(number, message)
 {
@@ -26,4 +29,28 @@ function SendSMS(number, message)
 	http.request(options, callback).end();
 }
 
-SendSMS(config.TestSMSNumber, 'Hello+World')
+tasksRef.on('child_added', function(snapshot) {
+  //console.log(snapshot)
+
+  item = snapshot.val();
+
+  var processed = item.processed, task = item.task, payload = item.payload;
+  if(!processed)
+  {
+  	switch(task)
+	{
+	  	case 'sms':
+	  		console.log('Received SMS task. Number: ' + payload.number);
+	  		SendSMS(payload.number, payload.message)
+	  		break;
+	  	default:
+	  		console.log('Unknown task: ' + task);
+	  		break;
+
+	  	
+	}
+
+	snapshot.ref().remove();
+  }
+  
+});
