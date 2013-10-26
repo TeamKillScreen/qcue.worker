@@ -15,5 +15,9 @@
   "license": "BSD",
   "bugs": {
     "url": "https://github.com/TeamKillScreen/qcue.worker/issues"
+  },
+  "dependencies": {
+    "firebase": "~0.6.3",
+    "log-timestamp": "~0.1.0"
   }
 }
