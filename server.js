@@ -158,7 +158,7 @@ function handleUser(handleUserSnapShot)
 		if(!user.registrationTextSent)
 		{
 			console.log("Anonymous user detected. Sending registration text");
-			sendSMS(handleUserSnapShot.ref(), "Thanks for using qcue.me. Unfortunately we don't know who you are. Reply with NAME your name to register yourself.");
+			sendSMS(handleUserSnapShot.ref(), "Thanks for using qcue.me. Unfortunately we don't know who you are. Reply with NAME followed by your name to register.");
 			handleUserSnapShot.ref().child('registrationTextSent').set(true);
 		}
 	}
