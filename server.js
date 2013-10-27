@@ -9,6 +9,7 @@ var queuesRef = new Firebase(config.QueuesFirebaseURL);
 var usersRef = new Firebase(config.UsersFirebaseURL);
 
 var managedQueues = [];
+var delayedServices = [];
 
 function taskSendSMS(number, message)
 {
@@ -62,6 +63,9 @@ function sendSMS(userRef, message)
 
 function addTask(type, payload)
 {
+	//console.dir(type);
+	//console.dir(payload);
+
 	tasksRef.push({ task: type, payload: payload });
 }
 
@@ -84,14 +88,58 @@ function handleQueuedUser(handleUserSnapShot)
 
 				break;
 			case 'servicing':
-				sendSMS(getUserRef(item.userId), messages.servicing);
+				if(!item.processedServicing)
+				{
+					sendSMS(getUserRef(item.userId), messages.servicing);
+
+					parentQueue.ref().once('value', function(queueSnapshot) {
+						if(queueSnapshot.val().type == 'automated')
+						{
+							console.log(item.processed)
+
+							
+							console.log("Scheduling delayed Service");
+
+							var t = new Date();
+							t.setSeconds(t.getSeconds() + queueSnapshot.val().serviceTime);
+
+							//This was an attempt to fix the annoying GMT/BST bug at 1:30am the first time round. It failed.
+							//var t = new Date(t.valueOf() - t.getTimezoneOffset() * 60000);
+
+							payload = { queue: queueSnapshot.name(), 
+										user: item.userId,
+										dequeueTime: t.toISOString()
+							};
+
+							addTask('delayedService', payload);
+
+							handleUserSnapShot.ref().child('processedServicing').set(true);
+							
+						}
+					});
+				}	
 				break;
 			case 'serviced':
 				sendSMS(getUserRef(item.userId), messages.serviced);
 				handleUserSnapShot.ref().remove();
 				break;
 			case 'holding':
-				sendSMS(getUserRef(item.userId), messages.holding);
+				if(!item.processedHold)
+				{
+					sendSMS(getUserRef(item.userId), messages.holding);
+					handleUserSnapShot.ref().child('processedHold').set(true);
+				}				
+				break;
+			case 'waiting':
+				//If moving into waiting clean up any state specific locks
+				if(item.processedHold)
+				{
+					handleUserSnapShot.ref().child('processedHold').ref().remove();
+				}
+				if(item.processedServicing)
+				{
+					handleUserSnapShot.ref().child('processedServicing').ref().remove();
+				}
 				break;
 		}	
 
@@ -138,6 +186,11 @@ tasksRef.on('child_added', function(snapshot) {
 		case 'sms':
 			console.log('Received SMS task. Number: ' + payload.mobile);
 			taskSendSMS(payload.mobile, payload.message)
+			snapshot.ref().remove();
+			break;
+		case 'delayedService':
+			console.log('Loading delayedService into memory for processing when required');
+			delayedServices.push(snapshot);
 			break;
 		default:
 			console.log('Unknown task: ' + task);
@@ -146,7 +199,7 @@ tasksRef.on('child_added', function(snapshot) {
 		
 	}
 
-	snapshot.ref().remove();
+	
   }
   
 });
@@ -192,6 +245,7 @@ usersRef.on('child_changed', function(childSnapshot) {
 setInterval(function() {
 	//console.log("Checking automated queues")
 
+	//PROCESS QUEUES
 	var length = managedQueues.length,
 		element = null;
 	for (var i = 0; i < length; i++)
@@ -234,6 +288,45 @@ setInterval(function() {
 
 		}
 	}
+
+
+	//PROCESS DELAYEDSERVICE
+	length = delayedServices.length,
+		element = null;
+	for (var i = 0; i < length; i++)
+	{
+		element = delayedServices[i].val();
+
+		//console.dir(element)
+
+		dequeue = new Date(element.payload.dequeueTime)
+
+		//console.log(dequeue)
+
+		if(dequeue < new Date())
+		{
+			userItem = queuesRef.child(element.payload.queue).child('users').ref().once('value', function(delServiceSnapshot){
+				delServiceSnapshot.forEach(function(userItemSnapshot){
+					userItem = userItemSnapshot.val();
+
+					if(userItem.userId == element.payload.user)
+					{
+						console.log('Servicing as a result of delayed service');
+						setStatus(userItemSnapshot.ref(), 'serviced');
+					}
+				});
+
+				//We process these outside the loop in order to quietly tidyup incase duplicates get added
+				//Delete from firebase
+				delayedServices[i].ref().remove();
+
+				//Remove from array
+				delayedServices.splice(i, 1);
+			});
+		}
+
+	}
+
 }, 1000)
 
 console.log("Worker initialised");
