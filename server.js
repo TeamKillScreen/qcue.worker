@@ -195,11 +195,7 @@ tasksRef.on('child_added', function(snapshot) {
 		default:
 			console.log('Unknown task: ' + task);
 			break;
-
-		
 	}
-
-	
   }
   
 });
@@ -267,23 +263,49 @@ setInterval(function() {
 			//Get the item from firebase
 			element.queue.once('value', function(snapshot) {
 
-				item = snapshot.val();
+				processItem = snapshot.val();
 
-				startDate = new Date(item.queueStart);
+				startDate = new Date(processItem.queueStart);
 
 				if(startDate < new Date())
 				{
-					console.log("Processing queue: " + item.name);
+					console.log("Processing queue: " + processItem.name);
+
+					if(processItem.users)
+					{
+						snapshot.child('users').ref().once('value', function(usersSnapshot){
+
+							var didDequeue = false;
+
+							usersSnapshot.forEach(function(userSnapshot){
+
+								if(!didDequeue)
+								{
+									queuedUser = userSnapshot.val();
+
+									if(queuedUser.status == 'waiting')
+									{
+										console.log("Servicing " + queuedUser.userId)
+
+										setStatus(userSnapshot.ref(), 'servicing');
+
+										didDequeue = true;
+									}
+								}
+							});
+
+						})
+					}
+					console.log("Finished processing queue: " + processItem.name);
+
 				}
 				else
 				{
-					console.log("Queue not started: " + item.name);
+					console.log("Queue not started: " + processItem.name);
 				}
 
-				//DO STUFF
-
 				//Update local timer cache
-				element.timer = item.gap;
+				element.timer = processItem.gap;
 			});
 
 		}
@@ -293,35 +315,45 @@ setInterval(function() {
 	//PROCESS DELAYEDSERVICE
 	length = delayedServices.length,
 		element = null;
+
+	//console.log(delayedServices.length)
 	for (var i = 0; i < length; i++)
 	{
-		element = delayedServices[i].val();
+		//console.log(i)
+		//console.log(delayedServices.length)
+		element = delayedServices[i];
 
 		//console.dir(element)
 
-		dequeue = new Date(element.payload.dequeueTime)
+		dequeue = new Date(element.val().payload.dequeueTime)
 
 		//console.log(dequeue)
 
 		if(dequeue < new Date())
 		{
-			userItem = queuesRef.child(element.payload.queue).child('users').ref().once('value', function(delServiceSnapshot){
+			userItem = queuesRef.child(element.val().payload.queue).child('users').ref().once('value', function(delServiceSnapshot){
 				delServiceSnapshot.forEach(function(userItemSnapshot){
 					userItem = userItemSnapshot.val();
 
-					if(userItem.userId == element.payload.user)
+					if(userItem.userId == element.val().payload.user)
 					{
 						console.log('Servicing as a result of delayed service');
 						setStatus(userItemSnapshot.ref(), 'serviced');
 					}
 				});
 
+				//console.dir(delayedServices)
+
 				//We process these outside the loop in order to quietly tidyup incase duplicates get added
 				//Delete from firebase
-				delayedServices[i].ref().remove();
-
+				element.ref().remove();
+				
 				//Remove from array
 				delayedServices.splice(i, 1);
+
+				//We need to do this to compensate for the removal of an item from the queue. Bit hacky.
+				i = i - 1;
+				length = delayedServices.length;
 			});
 		}
 
